@@ -72,7 +72,105 @@ function buildDiscordAvatarUrl(userId: string, avatarHash: string | null | undef
   if (!avatarHash) {
     return null;
   }
+  if (avatarHash.startsWith("http://") || avatarHash.startsWith("https://")) {
+    return avatarHash;
+  }
   return `https://cdn.discordapp.com/avatars/${userId}/${avatarHash}.png?size=128`;
+}
+
+function normalizeName(value: string | null | undefined) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function resolveIdentityFromParticipants(
+  participants: Array<{
+    id: string;
+    username?: string | null;
+    global_name?: string | null;
+    nickname?: string | null;
+    avatar?: string | null;
+  }>,
+  fallbackUserName: string,
+  explicitUserId: string | null,
+) {
+  if (!participants.length) {
+    return null;
+  }
+
+  if (explicitUserId) {
+    const exact = participants.find((participant) => participant.id === explicitUserId);
+    if (exact) {
+      return {
+        id: exact.id,
+        username: exact.global_name || exact.nickname || exact.username || fallbackUserName,
+        avatarUrl: buildDiscordAvatarUrl(exact.id, exact.avatar),
+      };
+    }
+  }
+
+  const wantedName = normalizeName(fallbackUserName);
+  const byName = participants.filter((participant) => {
+    const names = [
+      normalizeName(participant.global_name),
+      normalizeName(participant.nickname),
+      normalizeName(participant.username),
+    ].filter(Boolean);
+    return names.includes(wantedName);
+  });
+
+  if (byName.length === 1) {
+    const matched = byName[0];
+    return {
+      id: matched.id,
+      username: matched.global_name || matched.nickname || matched.username || fallbackUserName,
+      avatarUrl: buildDiscordAvatarUrl(matched.id, matched.avatar),
+    };
+  }
+
+  if (participants.length === 1) {
+    const only = participants[0];
+    return {
+      id: only.id,
+      username: only.global_name || only.nickname || only.username || fallbackUserName,
+      avatarUrl: buildDiscordAvatarUrl(only.id, only.avatar),
+    };
+  }
+
+  return null;
+}
+
+function resolveIdentityFromVoiceStates(
+  voiceStates: Array<{
+    user?: {
+      id?: string;
+      username?: string | null;
+      global_name?: string | null;
+      avatar?: string | null;
+    };
+    nick?: string | null;
+  }>,
+  fallbackUserName: string,
+  explicitUserId: string | null,
+) {
+  const mapped: Array<{
+    id: string;
+    username?: string | null;
+    global_name?: string | null;
+    nickname?: string | null;
+    avatar?: string | null;
+  }> = voiceStates
+    .map((state) => ({
+      id: String(state.user?.id || ""),
+      username: state.user?.username || null,
+      global_name: state.user?.global_name || null,
+      nickname: state.nick || null,
+      avatar: state.user?.avatar || null,
+    }))
+    .filter((entry) => entry.id.length > 0);
+
+  return resolveIdentityFromParticipants(mapped, fallbackUserName, explicitUserId);
 }
 
 function getOrCreateSessionGuestId() {
@@ -217,8 +315,44 @@ export default function HomePage() {
             nextUser.id = fallbackUserId;
             nextUser.username = fallbackUserName;
 
-            const urlUserId = getQueryParam("user_id") || fallbackUserId;
-            if (urlUserId) {
+            const urlUserId = getQueryParam("user_id");
+
+            try {
+              const participants =
+                await discordSdk.commands.getActivityInstanceConnectedParticipants();
+              const resolvedFromParticipants = resolveIdentityFromParticipants(
+                participants.participants,
+                fallbackUserName,
+                urlUserId,
+              );
+              if (resolvedFromParticipants) {
+                nextUser = resolvedFromParticipants;
+              }
+            } catch (innerError) {
+              // eslint-disable-next-line no-console
+              console.warn("Discord participants lookup failed", innerError);
+            }
+
+            if (nextUser.id.startsWith("guest_") && nextRoomId) {
+              try {
+                const channel = await discordSdk.commands.getChannel({
+                  channel_id: nextRoomId,
+                });
+                const resolvedFromVoice = resolveIdentityFromVoiceStates(
+                  channel.voice_states || [],
+                  fallbackUserName,
+                  urlUserId,
+                );
+                if (resolvedFromVoice) {
+                  nextUser = resolvedFromVoice;
+                }
+              } catch (innerError) {
+                // eslint-disable-next-line no-console
+                console.warn("Discord channel voice state lookup failed", innerError);
+              }
+            }
+
+            if (nextUser.id.startsWith("guest_") && urlUserId) {
               try {
                 const user = await discordSdk.commands.getUser({ id: urlUserId });
                 if (user?.id) {
