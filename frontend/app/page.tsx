@@ -62,6 +62,20 @@ function trimTrailingSlash(path: string) {
   return path.endsWith("/") ? path.slice(0, -1) : path;
 }
 
+function getOrCreateSessionGuestId() {
+  if (typeof window === "undefined") {
+    return `guest_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+  const key = "horoj_haniya_session_guest_id";
+  const existing = window.sessionStorage.getItem(key);
+  if (existing) {
+    return existing;
+  }
+  const generated = `guest_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  window.sessionStorage.setItem(key, generated);
+  return generated;
+}
+
 function patchDiscordNetworkMappings(baseUrl: string) {
   const parsed = new URL(baseUrl);
   const targetPath = parsed.pathname.endsWith("/")
@@ -163,7 +177,7 @@ export default function HomePage() {
 
     async function bootstrap() {
       const inDiscordActivity = isDiscordActivityRuntime();
-      const fallbackUserId = getQueryParam("user_id") || `guest_${Date.now()}`;
+      const fallbackUserId = getQueryParam("user_id") || getOrCreateSessionGuestId();
       const fallbackUserName =
         getQueryParam("username") ||
         getQueryParam("global_name") ||
@@ -187,23 +201,8 @@ export default function HomePage() {
             await discordSdk.ready();
 
             nextRoomId = discordSdk.channelId || fallbackRoomId;
-            const paramUserId = getQueryParam("user_id");
-            if (paramUserId) {
-              nextUser.id = paramUserId;
-              nextUser.username = fallbackUserName;
-            } else {
-              const participants =
-                await discordSdk.commands.getInstanceConnectedParticipants();
-              if (participants.participants.length > 0) {
-                const participant = participants.participants[0];
-                nextUser.id = participant.id;
-                nextUser.username =
-                  participant.global_name ||
-                  participant.nickname ||
-                  participant.username;
-                nextUser.avatarUrl = participant.avatar || null;
-              }
-            }
+            nextUser.id = fallbackUserId;
+            nextUser.username = fallbackUserName;
           } catch (error) {
             // eslint-disable-next-line no-console
             console.error("Discord SDK init failed", error);
