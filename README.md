@@ -69,8 +69,8 @@ Frontend defaults to `http://localhost:3000`, backend to `http://localhost:3001`
 
 ## Discord URL Mapping
 
-Frontend calls backend using absolute `NEXT_PUBLIC_BACKEND_BASE_URL`.  
-When embedded in Discord, the app calls `patchUrlMappings(...)` so `fetch`, `WebSocket`, and XHR traffic can flow through the URL mapping prefix you configure in the Discord Developer Portal.
+Frontend uses `NEXT_PUBLIC_BACKEND_BASE_URL` outside Discord.  
+When embedded in Discord, the app routes API and Socket.IO through `NEXT_PUBLIC_URL_MAPPING_PREFIX` (for example `/proxy`) and also applies `patchUrlMappings(...)` for compatibility.
 
 ## Test Commands
 

@@ -21,7 +21,7 @@ import {
 const BACKEND_BASE_URL =
   process.env.NEXT_PUBLIC_BACKEND_BASE_URL || "http://localhost:3001";
 const URL_MAPPING_PREFIX =
-  process.env.NEXT_PUBLIC_URL_MAPPING_PREFIX || "/.proxy";
+  process.env.NEXT_PUBLIC_URL_MAPPING_PREFIX || "/proxy";
 
 const INITIAL_ROOM_STATE: RoomStateView = {
   roomId: "local-room",
@@ -40,19 +40,26 @@ const INITIAL_ROOM_STATE: RoomStateView = {
   rankedResults: [],
 };
 
-function isEmbeddedFrame() {
-  try {
-    return window.self !== window.top;
-  } catch {
-    return true;
-  }
-}
-
 function getQueryParam(name: string): string | null {
   if (typeof window === "undefined") {
     return null;
   }
   return new URLSearchParams(window.location.search).get(name);
+}
+
+function isDiscordActivityRuntime() {
+  return Boolean(
+    getQueryParam("frame_id") ||
+      getQueryParam("instance_id") ||
+      getQueryParam("platform"),
+  );
+}
+
+function trimTrailingSlash(path: string) {
+  if (!path) {
+    return "";
+  }
+  return path.endsWith("/") ? path.slice(0, -1) : path;
 }
 
 function patchDiscordNetworkMappings(baseUrl: string) {
@@ -128,12 +135,21 @@ export default function HomePage() {
     null,
   );
   const [revealedRanks, setRevealedRanks] = useState<number[]>([]);
+  const [useDiscordProxy, setUseDiscordProxy] = useState(false);
 
   const socketRef = useRef<Socket | null>(null);
   const dict = i18n[language];
   const isAdmin = me.id === ADMIN_DISCORD_ID;
   const dir = language === "ar" ? "rtl" : "ltr";
   const activePhaseLabel = dict[phaseLabelKey(roomState.phase)];
+  const backendApiBase = useMemo(() => {
+    if (useDiscordProxy) {
+      return trimTrailingSlash(URL_MAPPING_PREFIX) || "/proxy";
+    }
+    const parsed = new URL(BACKEND_BASE_URL);
+    const basePath = parsed.pathname === "/" ? "" : trimTrailingSlash(parsed.pathname);
+    return `${parsed.origin}${basePath}`;
+  }, [useDiscordProxy]);
 
   useGameAudio(roomState.phase);
 
@@ -146,6 +162,7 @@ export default function HomePage() {
     let cancelled = false;
 
     async function bootstrap() {
+      const inDiscordActivity = isDiscordActivityRuntime();
       const fallbackUserId = getQueryParam("user_id") || `guest_${Date.now()}`;
       const fallbackUserName =
         getQueryParam("username") ||
@@ -160,7 +177,7 @@ export default function HomePage() {
       };
       let nextRoomId = fallbackRoomId;
 
-      if (isEmbeddedFrame()) {
+      if (inDiscordActivity) {
         if (process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID) {
           try {
             const discordSdk = new DiscordSDK(
@@ -187,7 +204,9 @@ export default function HomePage() {
                 nextUser.avatarUrl = participant.avatar || null;
               }
             }
-          } catch {
+          } catch (error) {
+            // eslint-disable-next-line no-console
+            console.error("Discord SDK init failed", error);
             setErrorMessage(
               "Discord SDK init failed. Running in local fallback mode.",
             );
@@ -207,10 +226,24 @@ export default function HomePage() {
         return;
       }
 
+      setUseDiscordProxy(inDiscordActivity);
       setRoomId(nextRoomId);
       setMe(nextUser);
 
-      const socket = io(BACKEND_BASE_URL, {
+      const parsedBackendUrl = new URL(BACKEND_BASE_URL);
+      const backendPathPrefix =
+        parsedBackendUrl.pathname === "/"
+          ? ""
+          : trimTrailingSlash(parsedBackendUrl.pathname);
+      const socketBase = inDiscordActivity
+        ? window.location.origin
+        : parsedBackendUrl.origin;
+      const socketPath = `${
+        inDiscordActivity ? trimTrailingSlash(URL_MAPPING_PREFIX) : backendPathPrefix
+      }/socket.io`;
+
+      const socket = io(socketBase, {
+        path: socketPath,
         transports: ["websocket", "polling"],
       });
       socketRef.current = socket;
@@ -313,7 +346,7 @@ export default function HomePage() {
         }
 
         const response = await fetch(
-          `${BACKEND_BASE_URL}/api/klipy/search?${params.toString()}`,
+          `${backendApiBase}/api/klipy/search?${params.toString()}`,
         );
         const payload = await response.json();
         if (!response.ok) {
@@ -342,7 +375,7 @@ export default function HomePage() {
         setSearching(false);
       }
     },
-    [language, roomState.phase, searchCursor, searchTerm],
+    [backendApiBase, language, roomState.phase, searchCursor, searchTerm],
   );
 
   const visiblePodium = useMemo(() => {
