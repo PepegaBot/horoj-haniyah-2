@@ -60,12 +60,14 @@ Frontend defaults to `http://localhost:3000`, backend to `http://localhost:3001`
 - `PORT`
 - `CORS_ORIGIN`
 - `KLIPY_API_KEY`
+- `ADMIN_OVERRIDE_IDS` (optional, comma-separated Discord IDs for debug admin access)
 
 ### Frontend (`frontend/.env.local`)
 
 - `NEXT_PUBLIC_DISCORD_CLIENT_ID`
 - `NEXT_PUBLIC_BACKEND_BASE_URL`
 - `NEXT_PUBLIC_URL_MAPPING_PREFIX`
+- `NEXT_PUBLIC_ADMIN_OVERRIDE_IDS` (optional, comma-separated IDs to show admin UI for debug)
 
 ## Discord URL Mapping
 

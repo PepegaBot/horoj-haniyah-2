@@ -22,6 +22,12 @@ const BACKEND_BASE_URL =
   process.env.NEXT_PUBLIC_BACKEND_BASE_URL || "http://localhost:3001";
 const URL_MAPPING_PREFIX =
   process.env.NEXT_PUBLIC_URL_MAPPING_PREFIX || "/proxy";
+const ADMIN_OVERRIDE_IDS = String(
+  process.env.NEXT_PUBLIC_ADMIN_OVERRIDE_IDS || "",
+)
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
 
 const INITIAL_ROOM_STATE: RoomStateView = {
   roomId: "local-room",
@@ -60,6 +66,13 @@ function trimTrailingSlash(path: string) {
     return "";
   }
   return path.endsWith("/") ? path.slice(0, -1) : path;
+}
+
+function buildDiscordAvatarUrl(userId: string, avatarHash: string | null | undefined) {
+  if (!avatarHash) {
+    return null;
+  }
+  return `https://cdn.discordapp.com/avatars/${userId}/${avatarHash}.png?size=128`;
 }
 
 function getOrCreateSessionGuestId() {
@@ -153,7 +166,7 @@ export default function HomePage() {
 
   const socketRef = useRef<Socket | null>(null);
   const dict = i18n[language];
-  const isAdmin = me.id === ADMIN_DISCORD_ID;
+  const isAdmin = me.id === ADMIN_DISCORD_ID || ADMIN_OVERRIDE_IDS.includes(me.id);
   const dir = language === "ar" ? "rtl" : "ltr";
   const activePhaseLabel = dict[phaseLabelKey(roomState.phase)];
   const backendApiBase = useMemo(() => {
@@ -203,6 +216,21 @@ export default function HomePage() {
             nextRoomId = discordSdk.channelId || fallbackRoomId;
             nextUser.id = fallbackUserId;
             nextUser.username = fallbackUserName;
+
+            const urlUserId = getQueryParam("user_id") || fallbackUserId;
+            if (urlUserId) {
+              try {
+                const user = await discordSdk.commands.getUser({ id: urlUserId });
+                if (user?.id) {
+                  nextUser.id = user.id;
+                  nextUser.username = user.global_name || user.username || fallbackUserName;
+                  nextUser.avatarUrl = buildDiscordAvatarUrl(user.id, user.avatar);
+                }
+              } catch (innerError) {
+                // eslint-disable-next-line no-console
+                console.warn("Discord getUser failed, using fallback identity", innerError);
+              }
+            }
           } catch (error) {
             // eslint-disable-next-line no-console
             console.error("Discord SDK init failed", error);
@@ -860,7 +888,15 @@ export default function HomePage() {
                     className="flex items-center justify-between rounded-lg border border-white/10 bg-slate-900/45 px-3 py-2"
                   >
                     <div className="flex items-center gap-2">
-                      <div className="h-8 w-8 rounded-full bg-slate-700/70" />
+                      {player.avatarUrl ? (
+                        <img
+                          src={player.avatarUrl}
+                          alt={player.username}
+                          className="h-8 w-8 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="h-8 w-8 rounded-full bg-slate-700/70" />
+                      )}
                       <div className="text-sm text-slate-100">
                         {player.id === ADMIN_DISCORD_ID ? "👑 " : ""}
                         {player.username}
@@ -893,6 +929,9 @@ export default function HomePage() {
               </div>
               <div className="mt-2 text-xs text-slate-300">
                 {dict.voteCount}: {roomState.votesCount}
+              </div>
+              <div className="mt-2 break-all text-[11px] text-slate-400">
+                My ID: {me.id}
               </div>
             </section>
           </aside>

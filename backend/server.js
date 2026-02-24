@@ -96,8 +96,19 @@ function createId(prefix = "id") {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function getAdminOverrideIds() {
+  return String(process.env.ADMIN_OVERRIDE_IDS || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
 function isAdminUser(userId) {
-  return String(userId) === ADMIN_DISCORD_ID;
+  const normalizedUserId = String(userId);
+  if (normalizedUserId === ADMIN_DISCORD_ID) {
+    return true;
+  }
+  return getAdminOverrideIds().includes(normalizedUserId);
 }
 
 function clampMinPlayers(value) {
