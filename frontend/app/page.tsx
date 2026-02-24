@@ -54,11 +54,23 @@ function getQueryParam(name: string): string | null {
 }
 
 function isDiscordActivityRuntime() {
-  return Boolean(
-    getQueryParam("frame_id") ||
-      getQueryParam("instance_id") ||
-      getQueryParam("platform"),
-  );
+  if (typeof window === "undefined") {
+    return false;
+  }
+  const host = window.location.hostname.toLowerCase();
+  if (host.endsWith(".discordsays.com")) {
+    return true;
+  }
+  const params = new URLSearchParams(window.location.search);
+  const activityKeys = [
+    "frame_id",
+    "instance_id",
+    "platform",
+    "channel_id",
+    "guild_id",
+    "location_id",
+  ];
+  return activityKeys.some((key) => params.has(key));
 }
 
 function trimTrailingSlash(path: string) {
@@ -139,6 +151,16 @@ function resolveIdentityFromParticipants(
   }
 
   return null;
+}
+
+async function getSdkParticipants(discordSdk: DiscordSDK) {
+  try {
+    const response = await discordSdk.commands.getActivityInstanceConnectedParticipants();
+    return response.participants || [];
+  } catch {
+    const fallback = await discordSdk.commands.getInstanceConnectedParticipants();
+    return fallback.participants || [];
+  }
 }
 
 function resolveIdentityFromVoiceStates(
@@ -261,6 +283,8 @@ export default function HomePage() {
   );
   const [revealedRanks, setRevealedRanks] = useState<number[]>([]);
   const [useDiscordProxy, setUseDiscordProxy] = useState(false);
+  const [urlUserId, setUrlUserId] = useState<string | null>(null);
+  const [runtimeLabel, setRuntimeLabel] = useState("local");
 
   const socketRef = useRef<Socket | null>(null);
   const dict = i18n[language];
@@ -292,8 +316,10 @@ export default function HomePage() {
       const fallbackUserName =
         getQueryParam("username") ||
         getQueryParam("global_name") ||
+        getQueryParam("display_name") ||
         `Player ${fallbackUserId.slice(-4)}`;
       const fallbackRoomId = getQueryParam("channel_id") || "local-room";
+      const explicitUrlUserId = getQueryParam("user_id") || getQueryParam("referrer_id");
 
       let nextUser = {
         id: fallbackUserId,
@@ -314,16 +340,15 @@ export default function HomePage() {
             nextRoomId = discordSdk.channelId || fallbackRoomId;
             nextUser.id = fallbackUserId;
             nextUser.username = fallbackUserName;
-
-            const urlUserId = getQueryParam("user_id");
+            setRuntimeLabel("discord");
+            setUrlUserId(explicitUrlUserId);
 
             try {
-              const participants =
-                await discordSdk.commands.getActivityInstanceConnectedParticipants();
+              const participants = await getSdkParticipants(discordSdk);
               const resolvedFromParticipants = resolveIdentityFromParticipants(
-                participants.participants,
+                participants,
                 fallbackUserName,
-                urlUserId,
+                explicitUrlUserId,
               );
               if (resolvedFromParticipants) {
                 nextUser = resolvedFromParticipants;
@@ -341,7 +366,7 @@ export default function HomePage() {
                 const resolvedFromVoice = resolveIdentityFromVoiceStates(
                   channel.voice_states || [],
                   fallbackUserName,
-                  urlUserId,
+                  explicitUrlUserId,
                 );
                 if (resolvedFromVoice) {
                   nextUser = resolvedFromVoice;
@@ -352,9 +377,9 @@ export default function HomePage() {
               }
             }
 
-            if (nextUser.id.startsWith("guest_") && urlUserId) {
+            if (nextUser.id.startsWith("guest_") && explicitUrlUserId) {
               try {
-                const user = await discordSdk.commands.getUser({ id: urlUserId });
+                const user = await discordSdk.commands.getUser({ id: explicitUrlUserId });
                 if (user?.id) {
                   nextUser.id = user.id;
                   nextUser.username = user.global_name || user.username || fallbackUserName;
@@ -387,6 +412,10 @@ export default function HomePage() {
         return;
       }
 
+      if (!inDiscordActivity) {
+        setRuntimeLabel("local");
+        setUrlUserId(explicitUrlUserId);
+      }
       setUseDiscordProxy(inDiscordActivity);
       setRoomId(nextRoomId);
       setMe(nextUser);
@@ -1066,6 +1095,12 @@ export default function HomePage() {
               </div>
               <div className="mt-2 break-all text-[11px] text-slate-400">
                 My ID: {me.id}
+              </div>
+              <div className="mt-1 break-all text-[11px] text-slate-500">
+                URL User ID: {urlUserId || "none"}
+              </div>
+              <div className="mt-1 text-[11px] text-slate-500">
+                Runtime: {runtimeLabel}
               </div>
             </section>
           </aside>
