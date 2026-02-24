@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #06060d;
+  --bg-alt: #0d1023;
+  --card: #11142b;
+  --card-2: #171a34;
+  --text: #e6f7ff;
+  --muted: #95a7c6;
+  --neon-blue: #42c2ff;
+  --neon-purple: #905aff;
+  --neon-pink: #ff5de4;
+  --danger: #ff6a95;
+  --success: #4dffb8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(circle at 12% 20%, rgba(66, 194, 255, 0.2), transparent 34%),
+    radial-gradient(circle at 80% 8%, rgba(144, 90, 255, 0.25), transparent 42%),
+    radial-gradient(circle at 88% 78%, rgba(255, 93, 228, 0.2), transparent 38%),
+    linear-gradient(145deg, var(--bg), var(--bg-alt));
+  color: var(--text);
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.18;
+  background-image:
+    linear-gradient(transparent 95%, rgba(255, 255, 255, 0.22) 95%),
+    linear-gradient(90deg, transparent 95%, rgba(255, 255, 255, 0.15) 95%);
+  background-size: 22px 22px;
+}
+
+.neon-card {
+  background: linear-gradient(160deg, rgba(18, 22, 46, 0.92), rgba(12, 15, 34, 0.92));
+  border: 1px solid rgba(144, 90, 255, 0.45);
+  box-shadow:
+    0 0 0 1px rgba(66, 194, 255, 0.15) inset,
+    0 0 28px rgba(144, 90, 255, 0.24);
+  backdrop-filter: blur(4px);
+}
+
+.podium-step {
+  background: linear-gradient(180deg, rgba(35, 47, 85, 0.9), rgba(20, 25, 50, 0.9));
+  border: 1px solid rgba(66, 194, 255, 0.35);
+}
+
+.neon-btn {
+  border: 1px solid rgba(66, 194, 255, 0.8);
+  background: linear-gradient(145deg, rgba(66, 194, 255, 0.2), rgba(144, 90, 255, 0.22));
+  color: #d6f7ff;
+  transition: all 180ms ease;
+}
+
+.neon-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 0 18px rgba(66, 194, 255, 0.5);
+}
+
+.neon-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+input,
+select,
+button,
+textarea {
+  font: inherit;
+}
