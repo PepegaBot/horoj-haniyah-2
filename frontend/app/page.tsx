@@ -759,23 +759,6 @@ export default function HomePage() {
                       </label>
 
                       <label className="text-xs text-slate-200">
-                        {dict.rounds}: {roomState.maxRounds || 3}
-                        <input
-                          type="range"
-                          min="1"
-                          max="10"
-                          className="mt-1 w-full accent-cyan-400"
-                          value={roomState.maxRounds || 3}
-                          onChange={(event) =>
-                            socketRef.current?.emit("admin_set_max_rounds", {
-                              roomId,
-                              maxRounds: Number(event.target.value),
-                            })
-                          }
-                        />
-                      </label>
-
-                      <label className="text-xs text-slate-200">
                         {dict.enPrompt}
                         <input
                           className="mt-1 w-full rounded-lg border border-purple-400/40 bg-slate-950/70 p-2 text-sm"
@@ -802,6 +785,39 @@ export default function HomePage() {
                       >
                         {dict.submitPrompt}
                       </button>
+
+                      <label className="text-xs text-slate-200">
+
+                        {dict.rounds}: {roomState.maxRounds || 3}
+
+                        <input
+
+                          type="range"
+
+                          min="1"
+
+                          max="10"
+
+                          className="mt-1 w-full accent-cyan-400"
+
+                          value={roomState.maxRounds || 3}
+
+                          onChange={(event) =>
+
+                            socketRef.current?.emit("admin_set_max_rounds", {
+
+                              roomId,
+
+                              maxRounds: Number(event.target.value),
+
+                            })
+
+                          }
+
+                        />
+
+                      </label>
+                      
                       <button
                         type="button"
                         className="neon-btn rounded-lg p-2 text-sm"
