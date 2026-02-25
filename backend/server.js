@@ -103,12 +103,9 @@ function getAdminOverrideIds() {
     .filter(Boolean);
 }
 
-function isAdminUser(userId) {
+function isAdminUser(room, userId) {
   const normalizedUserId = String(userId);
-  if (normalizedUserId === ADMIN_DISCORD_ID) {
-    return true;
-  }
-  return getAdminOverrideIds().includes(normalizedUserId);
+  return room.adminId === normalizedUserId || normalizedUserId === ADMIN_DISCORD_ID || getAdminOverrideIds().includes(normalizedUserId);
 }
 
 function isRoomAdmin(room, userId) {
@@ -536,6 +533,25 @@ function createApp({ fetchImpl = fetch } = {}) {
     res.json({ ok: true, service: "horoj-haniya-backend" });
   });
 
+  app.post("/api/discord/token", async (req, res) => {
+    try {
+      const response = await fetchImpl("https://discord.com/api/oauth2/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: process.env.DISCORD_CLIENT_ID, // <-- Add this to backend .env
+          client_secret: process.env.DISCORD_CLIENT_SECRET, // <-- Add this to backend .env
+          grant_type: "authorization_code",
+          code: req.body.code,
+        }),
+      });
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      res.status(500).json({ error: "Token exchange failed" });
+    }
+  });
+
   app.get("/api/klipy/search", async (req, res) => {
     try {
       const query = String(req.query.q || "").trim();
@@ -645,6 +661,9 @@ function registerSocketHandlers(io, rooms) {
         }
 
         room.players.set(socket.id, player);
+        if (!room.adminId) {
+          room.adminId = player.id;
+        }
         if (!room.scores.has(player.id)) {
           room.scores.set(player.id, 0);
         }

@@ -343,54 +343,40 @@ export default function HomePage() {
             nextUser.username = fallbackUserName;
             setRuntimeLabel("discord");
             setUrlUserId(explicitUrlUserId);
-
+            
             try {
-              const participants = await getSdkParticipants(discordSdk);
-              const resolvedFromParticipants = resolveIdentityFromParticipants(
-                participants,
-                fallbackUserName,
-                explicitUrlUserId,
-              );
-              if (resolvedFromParticipants) {
-                nextUser = resolvedFromParticipants;
+              
+              const { code } = await discordSdk.commands.authorize({
+                client_id: process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID!,
+                response_type: "code",
+                state: "",
+                prompt: "none",
+                scope: ["identify", "guilds"],
+              });
+
+              const backendUrl = useDiscordProxy ? URL_MAPPING_PREFIX : BACKEND_BASE_URL;
+              const tokenResponse = await fetch(`${backendUrl}/api/discord/token`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ code }),
+              });
+              
+              if (!tokenResponse.ok) throw new Error("Failed to fetch token from backend");
+              
+              const { access_token } = await tokenResponse.json();
+
+              const authResult = await discordSdk.commands.authenticate({ access_token });
+
+              if (authResult?.user) {
+                nextUser.id = authResult.user.id;
+                nextUser.username = authResult.user.global_name || authResult.user.username;
+                nextUser.avatarUrl = buildDiscordAvatarUrl(authResult.user.id, authResult.user.avatar);
               }
-            } catch (innerError) {
-              // eslint-disable-next-line no-console
-              console.warn("Discord participants lookup failed", innerError);
+            } catch (authError) {
+
+              console.warn("Discord Authentication failed, falling back to guest", authError);
             }
 
-            if (nextUser.id.startsWith("guest_") && nextRoomId) {
-              try {
-                const channel = await discordSdk.commands.getChannel({
-                  channel_id: nextRoomId,
-                });
-                const resolvedFromVoice = resolveIdentityFromVoiceStates(
-                  channel.voice_states || [],
-                  fallbackUserName,
-                  explicitUrlUserId,
-                );
-                if (resolvedFromVoice) {
-                  nextUser = resolvedFromVoice;
-                }
-              } catch (innerError) {
-                // eslint-disable-next-line no-console
-                console.warn("Discord channel voice state lookup failed", innerError);
-              }
-            }
-
-            if (nextUser.id.startsWith("guest_") && explicitUrlUserId) {
-              try {
-                const user = await discordSdk.commands.getUser({ id: explicitUrlUserId });
-                if (user?.id) {
-                  nextUser.id = user.id;
-                  nextUser.username = user.global_name || user.username || fallbackUserName;
-                  nextUser.avatarUrl = buildDiscordAvatarUrl(user.id, user.avatar);
-                }
-              } catch (innerError) {
-                // eslint-disable-next-line no-console
-                console.warn("Discord getUser failed, using fallback identity", innerError);
-              }
-            }
           } catch (error) {
             // eslint-disable-next-line no-console
             console.error("Discord SDK init failed", error);
