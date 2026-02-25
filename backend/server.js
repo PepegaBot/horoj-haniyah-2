@@ -539,16 +539,20 @@ function createApp({ fetchImpl = fetch } = {}) {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
-          client_id: process.env.DISCORD_CLIENT_ID, // <-- Add this to backend .env
-          client_secret: process.env.DISCORD_CLIENT_SECRET, // <-- Add this to backend .env
+          client_id: process.env.DISCORD_CLIENT_ID,
+          client_secret: process.env.DISCORD_CLIENT_SECRET,
           grant_type: "authorization_code",
           code: req.body.code,
         }),
       });
+      
       const data = await response.json();
+      if (!response.ok) {
+         return res.status(response.status).json({ error: "Discord API rejected token", details: data });
+      }
       res.json(data);
     } catch (error) {
-      res.status(500).json({ error: "Token exchange failed" });
+      res.status(500).json({ error: "Token exchange failed internally" });
     }
   });
 
