@@ -354,7 +354,7 @@ export default function HomePage() {
                 scope: ["identify", "guilds"],
               });
 
-              const backendUrl = useDiscordProxy ? URL_MAPPING_PREFIX : BACKEND_BASE_URL;
+              const backendUrl = inDiscordActivity ? URL_MAPPING_PREFIX : BACKEND_BASE_URL;
               const tokenResponse = await fetch(`${backendUrl}/api/discord/token`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
