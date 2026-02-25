@@ -6,6 +6,22 @@ const { Server } = require("socket.io");
 
 dotenv.config();
 
+const mongoose = require("mongoose");
+
+// Connect to MongoDB
+if (process.env.MONGODB_URI) {
+  mongoose.connect(process.env.MONGODB_URI)
+    .then(() => console.log("✅ Connected to MongoDB"))
+    .catch(err => console.error("❌ MongoDB connection error:", err));
+}
+
+// Define the Database Schema for our Prompts
+const roomPromptsSchema = new mongoose.Schema({
+  roomId: String,
+  prompts: Array
+});
+const RoomPrompts = mongoose.model("RoomPrompts", roomPromptsSchema);
+
 const ADMIN_DISCORD_ID = "217998454197190656";
 
 const PHASES = {
@@ -91,6 +107,8 @@ const DEFAULT_PROMPTS = [
     ar: "لما المدرس يقول 'هذا سهل'",
   },
 ];
+
+
 
 function createId(prefix = "id") {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
@@ -662,7 +680,7 @@ function createApp({ fetchImpl = fetch } = {}) {
 
 function registerSocketHandlers(io, rooms) {
   io.on("connection", (socket) => {
-    socket.on("join_room", (payload) => {
+    socket.on("join_room", async (payload) => {
       try {
         const roomId = String(payload?.roomId || "").trim();
         const user = payload?.user;
@@ -676,7 +694,20 @@ function registerSocketHandlers(io, rooms) {
           return;
         }
 
-        const room = getOrCreateRoom(rooms, roomId);
+        let room = rooms.get(roomId);
+        if (!room) {
+          room = createRoom(roomId);
+          // Fetch saved prompts from the database for this specific Discord channel!
+          if (process.env.MONGODB_URI) {
+            try {
+              const savedData = await RoomPrompts.findOne({ roomId });
+              if (savedData && savedData.prompts) {
+                room.customPrompts = savedData.prompts;
+              }
+            } catch (err) { console.error("DB Load Error", err); }
+          }
+          rooms.set(roomId, room);
+        }
         const player = makePlayerFromPayload(user);
 
         // Keep one active socket per player ID.
@@ -759,7 +790,7 @@ function registerSocketHandlers(io, rooms) {
       emitRoomState(io, room);
     });
 
-    socket.on("add_custom_prompt", (payload) => {
+    socket.on("add_custom_prompt", async (payload) => {
       const roomId = String(payload?.roomId || socket.data.roomId || "");
       const room = rooms.get(roomId);
       const playerId = String(socket.data.playerId || "");
@@ -783,12 +814,25 @@ function registerSocketHandlers(io, rooms) {
         return;
       }
 
+      // ... previous code where it pushes to the array ...
       room.customPrompts.push({
         id: createId("custom"),
         source: "custom",
         en,
         ar,
       });
+
+      // Save the updated deck to the database!
+      if (process.env.MONGODB_URI) {
+        try {
+          await RoomPrompts.findOneAndUpdate(
+            { roomId },
+            { prompts: room.customPrompts },
+            { upsert: true } // This magically creates the document if it doesn't exist yet
+          );
+        } catch (err) { console.error("DB Save Error", err); }
+      }
+
       emitRoomState(io, room);
     });
 
