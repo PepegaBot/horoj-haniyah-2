@@ -373,8 +373,9 @@ export default function HomePage() {
                 nextUser.avatarUrl = buildDiscordAvatarUrl(authResult.user.id, authResult.user.avatar);
               }
             } catch (authError) {
-
-              console.warn("Discord Authentication failed, falling back to guest", authError);
+              // FORCES THE ERROR TO SHOW ON YOUR SCREEN
+              setErrorMessage(`Auth Error: ${authError instanceof Error ? authError.message : JSON.stringify(authError)}`);
+              console.error("Discord Auth fully failed:", authError);
             }
 
           } catch (error) {
