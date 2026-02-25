@@ -103,9 +103,9 @@ function getAdminOverrideIds() {
     .filter(Boolean);
 }
 
-function isAdminUser(room, userId) {
+function isAdminUser(userId) {
   const normalizedUserId = String(userId);
-  return room.adminId === normalizedUserId || normalizedUserId === ADMIN_DISCORD_ID || getAdminOverrideIds().includes(normalizedUserId);
+  return normalizedUserId === ADMIN_DISCORD_ID || getAdminOverrideIds().includes(normalizedUserId);
 }
 
 function isRoomAdmin(room, userId) {
@@ -698,7 +698,7 @@ function registerSocketHandlers(io, rooms) {
         emitError(socket, "ROOM_NOT_FOUND", "Room does not exist.");
         return;
       }
-      if (!isAdminUser(playerId)) {
+      if (!isRoomAdmin(room, playerId)) {
         emitError(socket, "FORBIDDEN", "Only the admin can change deck mode.");
         return;
       }
@@ -715,7 +715,7 @@ function registerSocketHandlers(io, rooms) {
         emitError(socket, "ROOM_NOT_FOUND", "Room does not exist.");
         return;
       }
-      if (!isAdminUser(playerId)) {
+      if (!isRoomAdmin(room, playerId)) {
         emitError(socket, "FORBIDDEN", "Only the admin can set minimum players.");
         return;
       }
@@ -732,7 +732,7 @@ function registerSocketHandlers(io, rooms) {
         emitError(socket, "ROOM_NOT_FOUND", "Room does not exist.");
         return;
       }
-      if (!isAdminUser(playerId)) {
+      if (!isRoomAdmin(room, playerId)) {
         emitError(socket, "FORBIDDEN", "Only the admin can add custom prompts.");
         return;
       }
