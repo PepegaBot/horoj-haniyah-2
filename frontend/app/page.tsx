@@ -288,7 +288,8 @@ export default function HomePage() {
 
   const socketRef = useRef<Socket | null>(null);
   const dict = i18n[language];
-  const isAdmin = me.id === ADMIN_DISCORD_ID || ADMIN_OVERRIDE_IDS.includes(me.id);
+  const myPlayer = roomState.players.find((p) => p.id === me.id);
+  const isAdmin = myPlayer?.isAdmin || me.id === ADMIN_DISCORD_ID || ADMIN_OVERRIDE_IDS.includes(me.id);
   const dir = language === "ar" ? "rtl" : "ltr";
   const activePhaseLabel = dict[phaseLabelKey(roomState.phase)];
   const backendApiBase = useMemo(() => {

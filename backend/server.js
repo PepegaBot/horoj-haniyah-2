@@ -111,6 +111,11 @@ function isAdminUser(userId) {
   return getAdminOverrideIds().includes(normalizedUserId);
 }
 
+function isRoomAdmin(room, userId) {
+  const normalizedUserId = String(userId);
+  return room.adminId === normalizedUserId || isAdminUser(normalizedUserId);
+}
+
 function clampMinPlayers(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
@@ -142,6 +147,7 @@ function makePlayerFromPayload(userPayload) {
 function createRoom(roomId) {
   return {
     roomId,
+    adminId: null,
     phase: PHASES.LOBBY,
     phaseEndsAt: null,
     deckMode: DECK_MODES.DEFAULT,
@@ -205,7 +211,7 @@ function sanitizeRoomState(room) {
       id: player.id,
       username: player.username,
       avatarUrl: player.avatarUrl,
-      isAdmin: isAdminUser(player.id),
+      isAdmin: isRoomAdmin(room, player.id),
       score: room.scores.get(player.id) || 0,
     }))
     .sort((a, b) => {
@@ -643,6 +649,10 @@ function registerSocketHandlers(io, rooms) {
           room.scores.set(player.id, 0);
         }
 
+        if (!room.adminId) {
+          room.adminId = player.id;
+        }
+
         socket.data.roomId = roomId;
         socket.data.playerId = player.id;
         socket.join(roomId);
@@ -731,7 +741,7 @@ function registerSocketHandlers(io, rooms) {
         emitError(socket, "ROOM_NOT_FOUND", "Room does not exist.");
         return;
       }
-      if (!isAdminUser(playerId)) {
+      if (!isRoomAdmin(room, playerId)) {
         emitError(socket, "FORBIDDEN", "Only the admin can start rounds.");
         return;
       }
@@ -840,6 +850,13 @@ function registerSocketHandlers(io, rooms) {
         clearRoomTimers(room);
         rooms.delete(roomId);
         return;
+      }
+
+      if (room.adminId === socket.data.playerId) {
+        const remainingPlayers = Array.from(room.players.values());
+        if (remainingPlayers.length > 0) {
+          room.adminId = remainingPlayers[0].id; // Give admin to the next available player
+        }
       }
 
       emitRoomState(io, room);
