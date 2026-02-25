@@ -44,6 +44,7 @@ const INITIAL_ROOM_STATE: RoomStateView = {
   votesCount: 0,
   voteOptions: [],
   rankedResults: [],
+  maxRounds: 3,
 };
 
 function getQueryParam(name: string): string | null {
@@ -302,6 +303,10 @@ export default function HomePage() {
   }, [useDiscordProxy]);
 
   useGameAudio(roomState.phase);
+  const getProxiedImageUrl = useCallback((url?: string) => {
+    if (!url) return "";
+    return `${backendApiBase}/api/image-proxy?url=${encodeURIComponent(url)}`;
+  }, [backendApiBase]);
 
   useEffect(() => {
     document.documentElement.dir = dir;
@@ -556,6 +561,20 @@ export default function HomePage() {
     [backendApiBase, language, roomState.phase, searchCursor, searchTerm],
   );
 
+  useEffect(() => {
+    if (roomState.phase !== PHASES.GIF_SEARCH) return;
+    
+    const delayDebounceFn = setTimeout(() => {
+      if (searchTerm.trim()) {
+        void searchKlipy(false);
+      } else {
+        setSearchResults([]); // Clear screen if they delete the text
+      }
+    }, 500); // Wait 500ms after they stop typing before searching
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchTerm, roomState.phase, searchKlipy]);
+
   const visiblePodium = useMemo(() => {
     const source = resultsTimeline?.podium || roomState.rankedResults || [];
     const byRank = new Map<number, PodiumEntry>();
@@ -740,6 +759,23 @@ export default function HomePage() {
                       </label>
 
                       <label className="text-xs text-slate-200">
+                        {dict.rounds}: {roomState.maxRounds || 3}
+                        <input
+                          type="range"
+                          min="1"
+                          max="10"
+                          className="mt-1 w-full accent-cyan-400"
+                          value={roomState.maxRounds || 3}
+                          onChange={(event) =>
+                            socketRef.current?.emit("admin_set_max_rounds", {
+                              roomId,
+                              maxRounds: Number(event.target.value),
+                            })
+                          }
+                        />
+                      </label>
+
+                      <label className="text-xs text-slate-200">
                         {dict.enPrompt}
                         <input
                           className="mt-1 w-full rounded-lg border border-purple-400/40 bg-slate-950/70 p-2 text-sm"
@@ -871,11 +907,7 @@ export default function HomePage() {
                               : "border-white/15"
                           }`}
                         >
-                          <img
-                            src={gif.previewUrl || gif.url}
-                            alt={gif.title || "GIF"}
-                            className="h-28 w-full object-cover md:h-32"
-                          />
+                          <img src={getProxiedImageUrl(gif.previewUrl || gif.url)} alt={gif.title || "GIF"} className="h-28 w-full object-cover md:h-32" />
                         </motion.button>
                       ))}
                     </AnimatePresence>
@@ -925,11 +957,7 @@ export default function HomePage() {
                         disabled={hasVoted || option.targetPlayerId === me.id}
                         onClick={() => emitVote(option.targetPlayerId)}
                       >
-                        <img
-                          src={option.gif.previewUrl || option.gif.url}
-                          alt={option.gif.title || "Vote option"}
-                          className="h-28 w-full object-cover md:h-36"
-                        />
+                        <img src={getProxiedImageUrl(option.gif.previewUrl || option.gif.url)} alt={option.gif.title || "Vote option"} className="h-28 w-full object-cover md:h-36" />
                         <div className="p-2 text-xs text-slate-200">
                           {hasVoted ? dict.waitingVotes : dict.voteNow}
                         </div>
@@ -985,11 +1013,7 @@ export default function HomePage() {
                                     👑
                                   </span>
                                 ) : null}
-                                <img
-                                  src={entry.gif.previewUrl || entry.gif.url}
-                                  alt={entry.gif.title || "Podium GIF"}
-                                  className="h-20 w-full object-cover md:h-24"
-                                />
+                                <img src={getProxiedImageUrl(entry.gif.previewUrl || entry.gif.url)} alt={entry.gif.title || "Podium GIF"} className="h-20 w-full object-cover md:h-24" />
                               </div>
 
                               <div className="mt-2 text-center text-xs text-slate-100 md:text-sm">

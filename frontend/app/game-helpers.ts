@@ -65,6 +65,7 @@ export type RoomStateView = {
   phase: Phase;
   phaseEndsAt: number | null;
   roundNumber: number;
+  maxRounds: number;
   deckMode: DeckMode;
   minPlayers: number;
   canStartRound: boolean;
@@ -120,6 +121,7 @@ export const i18n = {
     submitting: "Submitting...",
     searching: "Searching...",
     noGifResults: "No GIFs found",
+    rounds: "Rounds",
   },
   ar: {
     title: "هروج هانيه",
@@ -163,6 +165,7 @@ export const i18n = {
     submitting: "جارٍ الإرسال...",
     searching: "جارٍ البحث...",
     noGifResults: "ما في نتائج GIF",
+    rounds: "الجولات",
   },
 } as const;
 

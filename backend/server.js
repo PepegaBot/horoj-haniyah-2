@@ -146,6 +146,7 @@ function createRoom(roomId) {
     roomId,
     adminId: null,
     phase: PHASES.LOBBY,
+    maxRounds: 3,
     phaseEndsAt: null,
     deckMode: DECK_MODES.DEFAULT,
     minPlayers: 3,
@@ -221,6 +222,7 @@ function sanitizeRoomState(room) {
   return {
     roomId: room.roomId,
     phase: room.phase,
+    maxRounds: room.maxRounds,
     phaseEndsAt: room.phaseEndsAt,
     roundNumber: room.roundNumber,
     deckMode: room.deckMode,
@@ -387,7 +389,12 @@ function transitionToRoundResults(io, room) {
   room.rankedResults = buildPodium(room);
 
   startPhase(io, room, PHASES.ROUND_RESULTS, ROUND_RESULTS_SECONDS, () => {
-    transitionToLobby(io, room);
+    // Check if we hit the limit!
+    if (room.roundNumber >= room.maxRounds) {
+      transitionToLobby(io, room);
+    } else {
+      startRound(io, room); // Start the next round instantly
+    }
   });
 
   const revealSchedule = buildRevealSchedule(room.rankedResults);
@@ -500,20 +507,19 @@ function startRound(io, room) {
 }
 
 function normalizeKlipyResult(item) {
-  const gifFormat = item?.media_formats?.gif;
-  const mediumGifFormat = item?.media_formats?.mediumgif;
-  const url = gifFormat?.url || mediumGifFormat?.url || null;
+  // Check Tenor v2 format OR Klipy native format
+  const media = item?.media_formats || item?.media?.[0] || item;
+  const gifFormat = media?.gif;
+  const mediumGifFormat = media?.mediumgif || media?.tinygif;
+  const url = gifFormat?.url || mediumGifFormat?.url || item?.url || null;
 
-  if (!url) {
-    return null;
-  }
+  if (!url) return null;
 
   return {
-    id: String(item.id),
+    id: String(item.id || Math.random()),
     title: String(item.title || ""),
     url,
-    previewUrl:
-      gifFormat?.preview || mediumGifFormat?.preview || gifFormat?.url || url,
+    previewUrl: gifFormat?.preview || mediumGifFormat?.preview || gifFormat?.url || url,
   };
 }
 
@@ -547,6 +553,25 @@ function createApp({ fetchImpl = fetch } = {}) {
         }),
       });
       
+  // Bypasses Discord's strict CSP image blocking!
+  app.get("/api/image-proxy", async (req, res) => {
+    try {
+      const targetUrl = req.query.url;
+      if (!targetUrl) return res.status(400).send("No URL provided");
+      
+      const response = await fetchImpl(targetUrl);
+      if (!response.ok) return res.status(response.status).send("Fetch failed");
+      
+      const contentType = response.headers.get("content-type");
+      const arrayBuffer = await response.arrayBuffer();
+      
+      if (contentType) res.set("Content-Type", contentType);
+      res.set("Cache-Control", "public, max-age=31536000"); // Cache it so it loads fast
+      res.send(Buffer.from(arrayBuffer));
+    } catch (error) {
+      res.status(500).send("Image proxy failed");
+    }
+  });    
       const data = await response.json();
       if (!response.ok) {
          return res.status(response.status).json({ error: "Discord API rejected token", details: data });
@@ -719,6 +744,16 @@ function registerSocketHandlers(io, rooms) {
         emitError(socket, "FORBIDDEN", "Only the admin can set minimum players.");
         return;
       }
+    socket.on("admin_set_max_rounds", (payload) => {
+      const roomId = String(payload?.roomId || socket.data.roomId || "");
+      const room = rooms.get(roomId);
+      const playerId = String(socket.data.playerId || "");
+      if (!room || !isRoomAdmin(room, playerId)) return;
+
+      // Ensure rounds is a number between 1 and 10
+      room.maxRounds = Math.max(1, Math.min(10, Number(payload?.maxRounds) || 3));
+      emitRoomState(io, room);
+    });
 
       room.minPlayers = clampMinPlayers(payload?.minPlayers);
       emitRoomState(io, room);
