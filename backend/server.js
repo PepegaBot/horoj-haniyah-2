@@ -543,6 +543,7 @@ function createApp({ fetchImpl = fetch } = {}) {
           client_secret: process.env.DISCORD_CLIENT_SECRET,
           grant_type: "authorization_code",
           code: req.body.code,
+          redirect_uri: "http://127.0.0.1",
         }),
       });
       
